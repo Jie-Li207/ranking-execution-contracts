@@ -1,0 +1,8 @@
+/*
+!/.gitignore
+!/README.md
+!/requirements.txt
+!/prepare.py
+!/work/
+/work/*
+!/work/*.py

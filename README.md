@@ -1,0 +1,184 @@
+# Ranking and Execution Contracts in Graph-Enhanced Multimodal Retrieval
+
+Core implementation for the experimental study of rooted candidate selection, graph-based reranking, and cohort-dependent diffusion. This repository contains executable source and dependency specifications. Data, model checkpoints, descriptors, generated results, and caches are obtained or generated locally.
+
+## Installation
+
+Use Python 3.12 and run commands from the repository root. The reference environment used PyTorch 2.5.1, CUDA 12.1 for optional encoder training, and two CPU threads for retrieval experiments.
+
+```bash
+python -m venv .venv
+python -m pip install -r requirements.txt
+python prepare.py
+python work/audit_enumeration.py
+```
+
+Activate `.venv` before the installation command (`.venv\Scripts\activate` on Windows; `source .venv/bin/activate` on Linux). `prepare.py` downloads pinned upstream source files, verifies SHA256 hashes, and writes the experiment configurations. `--config-only` writes configurations without downloads. The first enumeration run checks 200 small graphs against exhaustive entity-subset search; it does not require a dataset. Running it again after graph construction evaluates all available graph conditions.
+
+All generated files stay below the repository root unless `ICDE_STUDY_ROOT` is explicitly set for the scripts supporting that variable. Use a drive with sufficient free space. Full image encoding and training require substantially more disk space and time than the core algorithms. The scripts do not stop other processes. The low-label trainer requires CUDA and waits when it detects a competing Python GPU workload.
+
+## Implementation map
+
+| Component | Entry points |
+|---|---|
+| Exact directed selection and optimal-set diagnostics | `work/enumeration_oracle.py`, `work/directed_objective_core.py`, `work/audit_enumeration.py` |
+| Undirected flow formulation | `work/undirected_tree_oracle_tight.py`, `work/undirected_objective_audit_tight.py` |
+| Bounded expansion and physical plans | `work/lazy_coherence_plan.py`, `work/benchmark_prefix_plan_v3.py`, `work/benchmark_native_retrieval.py` |
+| Original cached-input retrieval | `work/convert_author_cache.py`, `work/author_cache_reproduction.py`, `work/author_objective_audit.py` |
+| Calibration and ranking controls | `work/audit_ranking_controls.py`, `work/audit_joint_calibration.py`, `work/audit_structure.py` |
+| SuperGlobal transfer and visual controls | `work/run_superglobal.py`, `work/run_superglobal_visual.py` |
+| Diffusion, cache scope, and cohort partitions | `work/audit_diffusion.py`, `work/audit_cohort_partitions.py` |
+| Split integrity and image quality | `work/audit_holdout.py`, `work/audit_image_quality.py`, `work/analyze_image_quality.py` |
+
+The remaining scripts construct the matched-input baselines, encode public images, or run the low-label controls needed by these experiments. Output directory names preserve the experiment identifiers used during the study.
+
+## Public inputs
+
+| Input | Source and acquisition |
+|---|---|
+| WikiMEL and RichpediaMEL author embeddings | [OpenMEL](https://github.com/DAISYzxy/OpenMEL); `python work/fetch_public_inputs.py WikiMEL` and `python work/fetch_public_inputs.py RichpediaMEL` |
+| Cleaned WikiDiverse and WikiMEL images and splits | [MIMIC project](https://pengfei-luo.github.io/MIMIC/) and [release repository](https://github.com/pengfei-luo/MIMIC); obtain the cleaned archives from the authors' links and unpack the nested image archives |
+| CLIP ViT-B/32 weights | [CLIP](https://github.com/openai/CLIP); `python work/fetch_public_inputs.py clip` |
+| Oxford5k and Paris6k Siamac descriptors and ground truth | [Diffusion release](https://github.com/fyang93/diffusion); `python work/fetch_visual_inputs.py` |
+
+Downloads are verified against the hashes in the source code. The visual descriptor archives total approximately 530 MB; they are downloaded only when that command is run. No weights or datasets are distributed in this repository. Public inputs and upstream implementations retain their original terms.
+
+Expected cleaned-data layout:
+
+```text
+data/wikidiverse/cleaned/WikiDiverse/
+  kb_entity.json
+  qid2id.json
+  wiki_diverse_train.json
+  wiki_diverse_dev.json
+  wiki_diverse_test.json
+  kb_image/
+  mention_image/
+data/wikimel/WikiMEL/
+  kb_entity_desc.json
+  qid2id.json
+  WIKIMEL_train.json
+  WIKIMEL_dev.json
+  kb_image/
+  mention_image/
+```
+
+The cleaned-data share password stated by the MIMIC authors is `kdd2023`. Preserve the released entity ordering, IDs, image filenames, and train/dev/test splits. Missing or corrupt images are represented by zero vectors with explicit masks; they are not silently replaced by successful examples.
+
+## Cached-input and objective experiments
+
+```bash
+python work/fetch_public_inputs.py WikiMEL
+python work/fetch_public_inputs.py RichpediaMEL
+python work/convert_author_cache.py WikiMEL
+python work/convert_author_cache.py RichpediaMEL
+python work/author_cache_reproduction.py WikiMEL
+python work/author_cache_reproduction.py RichpediaMEL
+python work/author_objective_audit.py WikiMEL --mode 3
+python work/author_objective_audit.py RichpediaMEL --mode 3
+python work/author_objective_audit.py WikiMEL --mode 4
+python work/author_objective_audit.py RichpediaMEL --mode 4
+python work/audit_enumeration.py
+python work/undirected_objective_audit_tight.py --input results/author_objective/WikiMEL_author3_t0.6_nall --limit 128
+python work/undirected_objective_audit_tight.py --input results/author_objective/RichpediaMEL_author3_t0.6_nall --limit 128
+python work/benchmark_native_retrieval.py WikiMEL
+python work/benchmark_native_retrieval.py RichpediaMEL
+python work/audit_native_trace.py
+python work/audit_native_coverage.py
+```
+
+For threshold sensitivity, run each dataset/mode combination again with `--threshold 0.55 --limit 256` and `--threshold 0.65 --limit 256`, then rerun `audit_enumeration.py`. The primary threshold is 0.6; budgets are 1, 5, 10, and 20. Threshold subsets use the first 256 SHA256-ordered query IDs.
+
+Canonical directed outcomes are written to `results/enumerated/`. Initial MILP outcomes remain in `results/author_objective/` or `results/objective_v2/`; a zero reported gap alone is not used to certify the final directed reference. Enumeration checks all subsets of at most ten roots. Undirected timeouts remain unresolved and must not be counted as exact solutions. The strict/tie comparison guard is 1e-7.
+
+The cached-input reproduction uses the released expanded text and image embeddings; it does not regenerate captions or reproduce the full published system score. The unfiltered objective intervention is a separate condition from native name-filtered retrieval. Three-channel and four-channel aggregation must also remain separate conditions.
+
+## Frozen features and low-label controls
+
+After obtaining the cleaned datasets:
+
+```bash
+python work/fetch_public_inputs.py clip
+python work/encode_full_wikidiverse.py
+python work/encode_full_wikimel.py
+python work/baseline_lexical.py
+python work/baseline_dense.py
+python work/fusion_controls.py
+python work/fewshot_fusion_baseline.py
+python work/coherence_operator_audit.py
+python work/wikimel_baseline_lexical.py
+python work/wikimel_baseline_dense.py
+python work/wikimel_fusion_controls.py
+python work/wikimel_fewshot_fusion_baseline.py
+python work/wikimel_coherence_operator_audit.py
+python work/validate_fastmel_backend.py
+python work/fastmel_lowshot.py --budget 128 --seed 101 --epochs 30
+python work/fastmel_lowshot_resumable.py --budget 128 --seed 102 --epochs 30
+python work/fastmel_lowshot.py --budget 128 --seed 103 --epochs 30
+python work/objective_replication_v2.py --dataset wikidiverse --roots native3
+python work/objective_replication_v2.py --dataset wikimel --roots native3
+python work/objective_replication_v2.py --dataset wikidiverse --roots paper4
+python work/objective_replication_v2.py --dataset wikidiverse --roots fast128
+python work/objective_replication_fast_seeds.py --dataset wikidiverse --roots fast128 --fast-seed 101 --limit 256
+python work/objective_replication_fast_seeds.py --dataset wikidiverse --roots fast128 --fast-seed 102 --limit 256
+python work/objective_replication_fast_seeds.py --dataset wikidiverse --roots fast128 --fast-seed 103 --limit 256
+python work/audit_enumeration.py
+python work/audit_ranking_controls.py
+python work/audit_joint_calibration.py
+python work/audit_structure.py
+```
+
+The low-label control uses 128 identical query labels per seed, batch size 8, and 30 fixed epochs without test-based tuning. It uses the released FAST-MEL pooling class with a native CLIP backend. This is an explicitly adapted low-label control, not a bitwise reproduction of the authors' batch-64 training. Seed 102 used the resumable path after a native runtime failure; that recovery path is retained. Checkpoints are local outputs and are excluded from version control.
+
+Calibration is fitted on the specified training subset; control choices use the development partition. Test outcomes must not be used to select the channel combination, threshold, graph weight, or exclusion rule. The image-quality slice below is exploratory and does not replace the original full test set.
+
+## Physical plans
+
+```bash
+python work/benchmark_prefix_plan_v3.py --dataset wikidiverse --scale 8192 --queries 32
+python work/benchmark_prefix_plan_v3.py --dataset wikidiverse --scale 32768 --queries 32
+python work/benchmark_prefix_plan_v3.py --dataset wikidiverse --queries 32
+python work/benchmark_prefix_plan_v3.py --dataset wikidiverse --queries 64
+python work/benchmark_prefix_plan_v3.py --dataset wikimel --queries 64
+```
+
+Runs use three interleaved repetitions and retain per-query timings and ordered-output checks. Use the same 32 queries across scales for the matched scaling comparison. The 64-query full-corpus run is a separate workload. CPU threads, Faiss BLAS switching, cache state, candidate budgets, and ties are controlled. Timings are hardware dependent. Native cached-input latency excludes raw image encoding and caption generation; isolated graph-stage latency must not be described as end-to-end speedup.
+
+## Reranking and cohort experiments
+
+```bash
+python work/encode_wikidiverse_test.py
+python work/run_superglobal.py
+python work/audit_holdout.py
+python work/audit_image_quality.py
+python work/analyze_image_quality.py
+python work/fetch_visual_inputs.py
+python work/run_superglobal_visual.py
+python work/audit_diffusion.py --dataset oxford5k --certified
+python work/audit_diffusion.py --dataset paris6k --certified
+python work/audit_cohort_partitions.py --dataset oxford5k --certified
+python work/audit_cohort_partitions.py --dataset paris6k --certified
+```
+
+SuperGlobal uses the pinned released reranking stages with 400 candidates, nine neighbors excluding self, and beta 0.15. Text-only and normalized text/image concatenation are both reported. The initial cosine ranking, descriptor augmentation, and complete reranking share identical frozen descriptors and candidates. This transfers the reranker; it does not reproduce the trained SuperGlobal encoder. Oxford/Paris use the original public Siamac descriptors as visual controls, not newly trained zero-shot features.
+
+Diffusion uses truncation 1000, kd 50, kq 10, alpha 0.99, and gamma 3. `--certified` uses CG tolerance 1e-8 with at most 200 iterations and a float64 direct solve of the same matrix when the residual is insufficient. Residuals and fallbacks are recorded. The default command without `--certified` retains the original shorter solver budget for numerical diagnostics; it is not the certified paper comparison.
+
+The cohort experiment preserves the complete gallery and changes only query grouping. It includes the fixed hash partition, two repeated partitions (seeds 20261028 and 20261029), fresh query permutation, and the original gallery-only control. The intentionally stale-cache run violates the cache namespace precondition and is reported separately. Cohort dependence of a transductive method is not itself an implementation error. Use fresh output/cache directories when changing the dataset, source, solver, or graph parameters.
+
+## Interpretation and reproducibility
+
+Results are generated under `results/`; images and arrays are not Git-tracked. Keep negative, failed, and unresolved outcomes. Optimal-set inclusion is not a ranking metric, repeated partitions reuse the same queries, and cross-dataset differences do not identify a causal mechanism. Confidence intervals quantify the specified query/image-cluster variation, not variation across machines or foundation-model pretraining datasets.
+
+This source release does not bundle the historical run archive or manuscript assets. Its commands regenerate the main experiment branches from public inputs. Public data availability and the substantial cost of full encoding/training remain separate from checking the small exact-selection algorithms.
+
+## Upstream implementations
+
+| Project | Pinned commit | Use |
+|---|---|---|
+| [OpenMEL](https://github.com/DAISYzxy/OpenMEL) | `5ebbebfe7e56513df8561178a93026d88103c730` | Original rooted expansion and cached-input contract |
+| [FAST-MEL](https://github.com/to2002td-cpu/FASTMEL) | `bf9fea428cb9f7fb107238df04b6391da247ea96` | Pooling class and released training negatives |
+| [SuperGlobal](https://github.com/ShihaoShao-GH/SuperGlobal) | `86946964b907e6f28a7264add2c15640fae30009` | Descriptor augmentation and reranking |
+| [Diffusion](https://github.com/fyang93/diffusion) | `5f5c6b3dae1bf887c686c0f424869b417d632481` | Released graph solver and official evaluation code |
+
+Upstream source is downloaded into the ignored `vendor/` directory with hash verification. Upstream license files are retained when downloaded. Device and API compatibility edits are applied in memory and recorded by the experiment runners.
