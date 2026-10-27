@@ -4,7 +4,16 @@ def enumerate_roots(roots, scores, edges, budgets, gold=None, tolerance=1e-07):
     roots = list(map(int, roots))
     scores = np.asarray(scores, float)
     nr = len(roots)
-    assert nr <= 10
+    edges = list(edges)
+    budgets = list(budgets)
+    if not 1 <= nr <= 10 or len(set(roots)) != nr or scores.shape != (nr,):
+        raise ValueError('Require 1 to 10 distinct roots and one score per root')
+    if not np.all(np.isfinite(scores)) or np.any(scores < 0):
+        raise ValueError('Root scores must be finite and nonnegative')
+    if any((u not in roots or v in roots or (not np.isfinite(w)) or (w < 0) for u, v, w in edges)):
+        raise ValueError('Require edges from roots to disjoint children with finite nonnegative weights')
+    if any((not isinstance(B, (int, np.integer)) or B < 1 for B in budgets)):
+        raise ValueError('Budgets must be positive integers')
     children = sorted({int(v) for u, v, w in edges})
     ci = {v: i for i, v in enumerate(children)}
     ri = {u: i for i, u in enumerate(roots)}

@@ -32,6 +32,28 @@ All generated files stay below the repository root unless `ICDE_STUDY_ROOT` is e
 
 The remaining scripts construct the matched-input baselines, encode public images, or run the low-label controls needed by these experiments. Output directory names preserve the experiment identifiers used during the study.
 
+## Contract checks and follow-up experiments
+
+`work/contract_checks.py` compares aligned ordered results and constructs cache fingerprints from source revision, parameters, IDs and descriptor bytes. A finite pass is reported as not falsified on the tested inputs; universal admission requires an explicit proved guard. The directed optimizer requires disjoint root and child entity sets and rejects inputs outside that domain.
+
+After obtaining the WikiDiverse descriptors and author caches using the commands below, run the following sequentially with two CPU threads:
+
+```bash
+python work/audit_reranking_grid.py --mode multimodal
+python work/audit_reranking_grid.py --mode text
+python work/audit_entity_cohorts.py
+python work/audit_transfer_caches.py
+python work/audit_cohort_numerics.py
+python work/audit_relational_consumer.py
+python work/audit_neutralization.py
+python work/benchmark_entity_cohorts.py
+python work/verify_contract_results.py results/rev7
+```
+
+The grid reports every fixed configuration and selects using 128 development queries, including an identity option. These are follow-up analyses of previously evaluated test inputs. Cheb-GR uses the released function at pinned commit `a3f67722b7c87fe3c4f1e0b80055b9487875a3ad`; the experiments transfer that function to frozen entity descriptors and do not reproduce its trained person-reidentification encoder. The 1,024-query cohort workload fixes a 2,472-entity union of initial top-five candidates across every partition. This is a second-stage pool after a full-KB scan, not a full-KB dense graph. Float32, float64, arrival-order and seeded-partition outputs are retained separately. Cache replay is a controlled local trace over real queries, not a production-service measurement.
+
+The source archive contains no checkpoints, data caches, generated results or historical logs. Verification reads locally generated per-query arrays and checks aggregate values against them. Protocols and SHA256 manifests are produced alongside those arrays.
+
 ## Public inputs
 
 | Input | Source and acquisition |
