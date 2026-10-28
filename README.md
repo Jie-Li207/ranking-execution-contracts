@@ -52,14 +52,38 @@ python work/verify_contract_results.py results/rev7
 
 The grid reports every fixed configuration and selects using 128 development queries, including an identity option. These are follow-up analyses of previously evaluated test inputs. Cheb-GR uses the released function at pinned commit `a3f67722b7c87fe3c4f1e0b80055b9487875a3ad`; the experiments transfer that function to frozen entity descriptors and do not reproduce its trained person-reidentification encoder. The 1,024-query cohort workload fixes a 2,472-entity union of initial top-five candidates across every partition. This is a second-stage pool after a full-KB scan, not a full-KB dense graph. Float32, float64, arrival-order and seeded-partition outputs are retained separately. Cache replay is a controlled local trace over real queries, not a production-service measurement.
 
-The source archive contains no checkpoints, data caches, generated results or historical logs. Verification reads locally generated per-query arrays and checks aggregate values against them. Protocols and SHA256 manifests are produced alongside those arrays.
+The source archive contains no checkpoints, data caches, generated results or historical logs. A separate numerical evidence asset is available from the [revision 10 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev10-evidence). It contains compact predictions, timings, graph weights and paired correction records, without images or model weights. Extract it to an `evidence` directory and run:
+
+```bash
+python work/verify_contract_results.py evidence/rev7
+python work/verify_evidence.py evidence
+python work/verify_evidence.py evidence --solve
+python work/export_evidence_tables.py evidence
+```
+
+The first two commands reaggregate stored predictions and verify hashes; they do not rerun encoders. `--solve` additionally performs new exact optimization on 128 saved graphs per primary dataset and all four budgets. The exporter writes source tables and measured-figure data under `evidence/generated`; the evidence map identifies each supported manuscript display. These checks are distinct from full inference and from independent external replication.
+
+## Crossed encoders and executing SQLite workload
+
+After the WikiDiverse acquisition, encoding and entity-cohort commands below, run:
+
+```bash
+python work/prepare_followup.py
+python work/encode_independent_features.py
+python work/audit_representation_factorial.py
+python work/benchmark_sqlite_cache.py
+```
+
+These commands write `results/rev10/` and download approximately 140 MB of pinned MiniLM and ResNet18 weights under `models/`. They use two CPU threads and do not use the GPU. The four conditions cross CLIP/MiniLM text with CLIP/ResNet18 images; all use the same 1,024 previously evaluated queries and 2,472 gallery IDs. This gallery was selected by CLIP, so the replacement-encoder results are conditional-gallery controls, not full-KB retrieval accuracy or fresh holdout confirmation. Each candidate ranking is recomputed within that fixed gallery.
+
+The SQLite runner executes Cheb-GR on actual cache misses, writes result rows and joins returned IDs to public entity types. It varies the fraction of unchanged cohorts over three seeded two-pass workloads. No-cache, invalid query-only caching and ordered-cohort caching are compared against fresh same-cohort references. Output directories must be new; existing databases are rejected rather than silently reused. Timings include database operations and the second-stage graph, but exclude encoding, the first KB scan, arrivals and concurrency. The workload is constructed from real query records; it is not a production trace. Allocated page growth replaces the optional `dbstat` interface unavailable on the original workstation; the failed first attempt is retained in the separate evidence archive.
 
 ## Public inputs
 
 | Input | Source and acquisition |
 |---|---|
 | WikiMEL and RichpediaMEL author embeddings | [OpenMEL](https://github.com/DAISYzxy/OpenMEL); `python work/fetch_public_inputs.py WikiMEL` and `python work/fetch_public_inputs.py RichpediaMEL` |
-| Cleaned WikiDiverse and WikiMEL images and splits | [MIMIC project](https://pengfei-luo.github.io/MIMIC/) and [release repository](https://github.com/pengfei-luo/MIMIC); obtain the cleaned archives from the authors' links and unpack the nested image archives |
+| Cleaned WikiDiverse and WikiMEL images and splits | [MIMIC project](https://pengfei-luo.github.io/MIMIC/) and [release repository](https://github.com/pengfei-luo/MIMIC); `python work/fetch_cleaned_inputs.py WikiDiverse --probe` checks current access, and the command without `--probe` downloads and verifies the archive; repeat with `WikiMEL`, then unpack the nested image archives |
 | CLIP ViT-B/32 weights | [CLIP](https://github.com/openai/CLIP); `python work/fetch_public_inputs.py clip` |
 | Oxford5k and Paris6k Siamac descriptors and ground truth | [Diffusion release](https://github.com/fyang93/diffusion); `python work/fetch_visual_inputs.py` |
 
@@ -192,7 +216,7 @@ The cohort experiment preserves the complete gallery and changes only query grou
 
 Results are generated under `results/`; images and arrays are not Git-tracked. Keep negative, failed, and unresolved outcomes. Optimal-set inclusion is not a ranking metric, repeated partitions reuse the same queries, and cross-dataset differences do not identify a causal mechanism. Confidence intervals quantify the specified query/image-cluster variation, not variation across machines or foundation-model pretraining datasets.
 
-This source release does not bundle the historical run archive or manuscript assets. Its commands regenerate the main experiment branches from public inputs. Public data availability and the substantial cost of full encoding/training remain separate from checking the small exact-selection algorithms.
+This source release does not bundle historical arrays or manuscript assets in the Git tree. The separate evidence release makes compact historical outputs and numerical corrections inspectable. On October 28, 2026, fresh public-link probes retrieved archive headers; those probes are not full-file downloads or fresh hash validation of complete archives. Acquisition scripts verify complete download hashes when executed. Public data availability and the cost of full encoding/training remain separate from checking the small exact-selection algorithms.
 
 ## Upstream implementations
 

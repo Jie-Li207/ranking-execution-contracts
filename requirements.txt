@@ -18,3 +18,4 @@ torch==2.5.1
 torchvision==0.20.1
 h5py==3.16.0
 joblib==1.5.3
+transformers==5.12.0
