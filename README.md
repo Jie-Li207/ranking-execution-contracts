@@ -52,16 +52,17 @@ python work/verify_contract_results.py results/rev7
 
 The grid reports every fixed configuration and selects using 128 development queries, including an identity option. These are follow-up analyses of previously evaluated test inputs. Cheb-GR uses the released function at pinned commit `a3f67722b7c87fe3c4f1e0b80055b9487875a3ad`; the experiments transfer that function to frozen entity descriptors and do not reproduce its trained person-reidentification encoder. The 1,024-query cohort workload fixes a 2,472-entity union of initial top-five candidates across every partition. This is a second-stage pool after a full-KB scan, not a full-KB dense graph. Float32, float64, arrival-order and seeded-partition outputs are retained separately. Cache replay is a controlled local trace over real queries, not a production-service measurement.
 
-The source archive contains no checkpoints, data caches, generated results or historical logs. A separate numerical evidence asset is available from the [revision 10 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev10-evidence). It contains compact predictions, timings, graph weights and paired correction records, without images or model weights. Extract it to an `evidence` directory and run:
+The source archive contains no checkpoints, data caches, generated results or historical logs. A separate numerical evidence asset is available from the [revision 11 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev11-evidence). The [revision 10 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev10-evidence) remains available unchanged. It contains compact predictions, timings, graph weights and paired correction records, without images or model weights. Extract it to an `evidence` directory and run:
 
 ```bash
 python work/verify_contract_results.py evidence/rev7
 python work/verify_evidence.py evidence
 python work/verify_evidence.py evidence --solve
+python work/verify_repeat.py evidence
 python work/export_evidence_tables.py evidence
 ```
 
-The first two commands reaggregate stored predictions and verify hashes; they do not rerun encoders. `--solve` additionally performs new exact optimization on 128 saved graphs per primary dataset and all four budgets. The exporter writes source tables and measured-figure data under `evidence/generated`; the evidence map identifies each supported manuscript display. These checks are distinct from full inference and from independent external replication.
+The first two commands reaggregate stored predictions and verify hashes; they do not rerun encoders. `--solve` additionally performs new exact optimization on 128 saved graphs per primary dataset and all four budgets. The exporter writes source tables and measured-figure data under `evidence/generated`; the evidence map identifies each supported manuscript display. The revision 11 archive preserves the historical outputs and adds `repeat_20261029/`: a complete operator repeat on the same stored representations and all 27 executing SQLite runs. `verify_repeat.py` checks repeated output arrays, workload identities, cache outcomes and measured latency summaries. The exporter uses the repeat timings when present. These checks are distinct from full encoder inference and from independent external replication.
 
 ## Crossed encoders and executing SQLite workload
 
@@ -77,6 +78,16 @@ python work/benchmark_sqlite_cache.py
 These commands write `results/rev10/` and download approximately 140 MB of pinned MiniLM and ResNet18 weights under `models/`. They use two CPU threads and do not use the GPU. The four conditions cross CLIP/MiniLM text with CLIP/ResNet18 images; all use the same 1,024 previously evaluated queries and 2,472 gallery IDs. This gallery was selected by CLIP, so the replacement-encoder results are conditional-gallery controls, not full-KB retrieval accuracy or fresh holdout confirmation. Each candidate ranking is recomputed within that fixed gallery.
 
 The SQLite runner executes Cheb-GR on actual cache misses, writes result rows and joins returned IDs to public entity types. It varies the fraction of unchanged cohorts over three seeded two-pass workloads. No-cache, invalid query-only caching and ordered-cohort caching are compared against fresh same-cohort references. Output directories must be new; existing databases are rejected rather than silently reused. Timings include database operations and the second-stage graph, but exclude encoding, the first KB scan, arrivals and concurrency. The workload is constructed from real query records; it is not a production trace. Allocated page growth replaces the optional `dbstat` interface unavailable on the original workstation; the failed first attempt is retained in the separate evidence archive.
+
+## Strict admission guard
+
+The traversal-to-sort admission check uses `0 <= edge_weight <= parent_score` without a positive tolerance. A previous `1e-7` relaxation admitted a two-entity counterexample. Source and numerical records from that version remain in the historical evidence archive. The corrected guard is conservative about self-edges: their rounding overshoots can cause fallback even when ignoring the self-edge would be safe.
+
+```bash
+python work/audit_strict_guard.py evidence/repeat_20261029/native_traces --output results/strict_guard_verification.json
+```
+
+Run `prepare.py` first to fetch the pinned native traversal used by this check. The audit extracts the actual guard and flat-selection function from the public runner, checks three tolerance counterexamples, replays 358 saved native traces including every fallback query, and checks 4,000 synthetic prefixes. The revision 11 evidence also contains fresh native/compiled latency measurements with the strict guard; the table exporter selects those measurements when present. These follow-up measurements preserve the original query subset and repetition protocol and do not overwrite the historical measurements.
 
 ## Public inputs
 
@@ -216,7 +227,7 @@ The cohort experiment preserves the complete gallery and changes only query grou
 
 Results are generated under `results/`; images and arrays are not Git-tracked. Keep negative, failed, and unresolved outcomes. Optimal-set inclusion is not a ranking metric, repeated partitions reuse the same queries, and cross-dataset differences do not identify a causal mechanism. Confidence intervals quantify the specified query/image-cluster variation, not variation across machines or foundation-model pretraining datasets.
 
-This source release does not bundle historical arrays or manuscript assets in the Git tree. The separate evidence release makes compact historical outputs and numerical corrections inspectable. On October 28, 2026, fresh public-link probes retrieved archive headers; those probes are not full-file downloads or fresh hash validation of complete archives. Acquisition scripts verify complete download hashes when executed. Public data availability and the cost of full encoding/training remain separate from checking the small exact-selection algorithms.
+This source release does not bundle historical arrays or manuscript assets in the Git tree. The separate evidence release makes compact historical outputs and numerical corrections inspectable. On October 29, 2026, the historical numerical-evidence ZIP was downloaded completely through its unauthenticated public link and its SHA256 was verified. The public verifier passed 1,577 checks, including 1,024 new exact budget solves over 256 saved graphs, and the contract verifier passed 119 checks. These are numerical-artifact checks. The separate October 28 source-dataset connectivity probes retrieved only archive headers; they are not new full-file downloads of the source datasets. Acquisition scripts verify complete download hashes when executed. Public data availability and the cost of full encoding/training remain separate from checking the small exact-selection algorithms.
 
 ## Upstream implementations
 

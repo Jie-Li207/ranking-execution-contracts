@@ -108,7 +108,7 @@ for begin in range(0, len(T), 16):
                 ww[u] = (ds * s).tolist()
         got = native.maximum_spanning_tree(-1, rt, ss, adj, ww, 21)[0][1:]
         base = rt[:20]
-        preconditions = all((s >= 0 for s in ss)) and all((0 <= w <= ss[j] + 1e-07 for j, u in enumerate(rt) for w in ww.get(u, [])))
+        preconditions = all((s >= 0 for s in ss)) and all((0 <= w <= ss[j] for j, u in enumerate(rt) for w in ww.get(u, [])))
         compiled = flat(rt, ss, adj, ww, 20) if preconditions else None
         if compiled is not None and got != compiled:
             mismatch.append(qi)

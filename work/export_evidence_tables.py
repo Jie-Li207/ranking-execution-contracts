@@ -56,6 +56,26 @@ for n, rows in allscale.items():
         x = [v['ms'] for v in rows if v['qi'] in common and v['backend'] == 'blas' and v['B'] == 5 and v['plan'] == plan]
         timing.append({'n': n, 'queries': len(common), 'plan': plan, 'median_ms': float(np.median(x))})
 save('scale', timing)
+native_latency = []
+for ds in ['WikiMEL', 'RichpediaMEL']:
+    path = root / f'repeat_20261029/native_strict/{ds}/timings.json'
+    if not path.exists():
+        continue
+    rows = [x for x in json.loads(path.read_text()) if x['primary']]
+    ids = sorted({x['qi'] for x in rows})
+    matrices = {}
+    for plan in ['native_eager', 'compiled_prefix']:
+        mat = np.array([[x['ms'] for x in rows if x['qi'] == qi and x['plan'] == plan] for qi in ids])
+        assert mat.shape == (128, 3)
+        matrices[plan] = mat
+        native_latency.append({'dataset': ds, 'plan': plan, 'queries': len(ids), 'repeats': 3, 'p50_ms': float(np.median(mat)), 'p95_ms': float(np.percentile(mat, 95)), 'serial_QPS': float(1000 / mat.mean())})
+    draw = np.random.default_rng(20261025).integers(len(ids), size=(2000, len(ids)))
+    a, b = matrices['native_eager'], matrices['compiled_prefix']
+    ci = 100 * np.quantile(b[draw].mean((1, 2)) / a[draw].mean((1, 2)) - 1, [.025, .975])
+    native_latency[-1].update(relative_mean_change_pct=float(100 * (b.mean() / a.mean() - 1)), CI_low=float(ci[0]), CI_high=float(ci[1]))
+if native_latency:
+    save('native_strict_latency', native_latency)
+
 fig3 = []
 for backend in ['direct', 'blas']:
     for plan in ['eager_batch_native', 'prefix_batch_flat']:
@@ -93,7 +113,10 @@ save('diffusion_common_depth', diffusion)
 factorial = json.loads((root / 'rev10/factorial_summary.json').read_text())
 save('encoder_reranking', [{'representation': row['representation'], **v, 'CI95_delta_pp': json.dumps(v['CI95_delta_pp'])} for row in factorial for v in row['reranking']])
 save('encoder_cohorts', [{'representation': row['representation'], **v} for row in factorial for v in row['cohort']])
-service = json.loads((root / 'rev10/sqlite_service/summary.json').read_text())['rows']
+service_path = root / 'repeat_20261029/sqlite_service/summary.json'
+if not service_path.exists():
+    service_path = root / 'rev10/sqlite_service/summary.json'
+service = json.loads(service_path.read_text())['rows']
 save('sqlite_all_runs', [{k: v for k, v in row.items() if k != 'stage_times'} for row in service])
 groups = defaultdict(list)
 for row in service: groups[(row['stable_cohort_fraction'], row['policy'])].append(row)
@@ -105,4 +128,4 @@ for (stable, policy), rows in groups.items():
         row.update({key + '_median': float(np.median(values)), key + '_min': min(values), key + '_max': max(values)})
     summary.append(row)
 save('sqlite_summary', summary)
-print(json.dumps({'output': str(out), 'csv_files': len(list(out.glob('*.csv')))}))
+print(json.dumps({'output': str(out), 'csv_files': len(list(out.glob('*.csv'))), 'sqlite_source': str(service_path.relative_to(root))}))

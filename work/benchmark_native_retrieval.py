@@ -67,7 +67,7 @@ def run(qi, compiled):
     dd, nn = idx.search(D[c], 5)
     adj = {u: nn[j].tolist() for j, u in enumerate(rt)}
     w = {u: (dd[j] * ss[j]).tolist() for j, u in enumerate(rt)}
-    if not compiled or any((not 0 <= x <= ss[j] + 1e-07 for j, u in enumerate(rt) for x in w[u])):
+    if not compiled or any(x < 0 for x in ss) or any((not 0 <= x <= ss[j] for j, u in enumerate(rt) for x in w[u])):
         return native.maximum_spanning_tree(-1, rt, ss, adj, w, 11)[0][1:]
     best = {u: (-x, -1, u) for u, x in zip(rt, ss)}
     for u in rt:
