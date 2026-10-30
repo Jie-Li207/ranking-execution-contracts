@@ -17,6 +17,36 @@ Activate `.venv` before the installation command (`.venv\Scripts\activate` on Wi
 
 All generated files stay below the repository root unless `ICDE_STUDY_ROOT` is explicitly set for the scripts supporting that variable. Use a drive with sufficient free space. Full image encoding and training require substantially more disk space and time than the core algorithms. The scripts do not stop other processes. The low-label trainer requires CUDA and waits when it detects a competing Python GPU workload.
 
+## Native ANN contracts and bounded update workloads
+
+This extension starts from public SIFT1M descriptors, independently of the entity encoders and historical prediction arrays. hnswlib 0.8.0 may require a local C++ compiler; the reference Windows build used the installed Microsoft toolchain. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` to `1` before numerical imports when running the verifier.
+
+```bash
+python work/prepare_native.py
+python work/acquire_native_inputs.py
+python work/audit_native_ann.py --backend faiss --scale 100000 --phase development
+python work/audit_native_ann.py --backend faiss --scale 100000 --phase confirmation
+python work/audit_native_ann.py --backend hnswlib --scale 100000 --phase development
+python work/audit_native_ann.py --backend hnswlib --scale 100000 --phase confirmation
+python work/audit_native_ann.py --backend faiss_sq8 --scale 1000000 --phase development
+python work/audit_native_ann.py --backend faiss_sq8 --scale 1000000 --phase confirmation
+python work/audit_native_ann.py --backend hnswlib --scale 1000000 --phase development
+python work/audit_native_ann.py --backend hnswlib --scale 1000000 --phase confirmation
+python work/audit_budget_guard.py
+python work/benchmark_budget_service.py
+python work/benchmark_budget_service.py --cache-bytes 65536
+python work/benchmark_budget_service.py --cache-bytes 65536 --invalid-only
+python work/verify_native_evidence.py
+```
+
+The dataset is 525,128,288 bytes; SHA256 is `dd6f0a6ed6b7ebb8934680f861a33ed01ff33991eaee4fd60914d854a0ca5984`. Downloading verifies this hash. Approximately 2 GB of local space covers descriptors, four serialized indexes and run outputs; reserve additional working memory and disk headroom. Builds stream blocks of 10,000 vectors. Direct 8-bit storage asserts that every descriptor coordinate is an integer in [0,255], so it does not quantize these source values. All configurations are fixed, including those crossing hnswlib's recommended `ef >= k` boundary; this is not a library-bug claim.
+
+The source-derived guard requires identical query/index/search dependencies, equal `max(ef,k)` and `max(ef,K)`, and a strict distance gap at the retained prefix cut. Both native and reused results use distance-then-ID canonical order. Its proof covers pinned hnswlib searches without filters or deletions. It preserves the native small-k answer, not exact nearest-neighbor truth. No guard is asserted for arbitrary Faiss modes.
+
+The service runs native hnswlib plus SQLite, 4,096 requests per trace, three seeds, one/four readers, LRU eviction, two attribute updates and 256 real-vector insertions. Writes occur at epoch barriers. A lock serializes the native mutable-ef configuration and search. Request schedules and revision fields are synthetic. Retained payload caps count serialized keys and distance/ID/revision arrays, excluding Python containers and shared inputs. Exact-k IDs isolate attribute invalidation; the guarded policy additionally permits cross-budget reuse. The invalid policy intentionally ignores versions and the prefix guard. Result differences are measured against fresh native searches for each actual k and epoch, not against a changed fixed-K interface. Existing output directories are rejected to preserve failed runs.
+
+The evidence archive adds `native_20261030/`, including development and confirmation outputs, per-request caches/joins, build receipts, protocols, corrections and failure logs. After extracting the archive, run `python work/verify_native_evidence.py evidence/native_20261030`. That command independently recalculates stored numerical checks; the full command sequence above performs new native builds and searches. Neither constitutes independent external replication. The original entry-only trace records, corrected reference failure and equal-byte extension remain distinguishable.
+
 ## Implementation map
 
 | Component | Entry points |
@@ -52,7 +82,7 @@ python work/verify_contract_results.py results/rev7
 
 The grid reports every fixed configuration and selects using 128 development queries, including an identity option. These are follow-up analyses of previously evaluated test inputs. Cheb-GR uses the released function at pinned commit `a3f67722b7c87fe3c4f1e0b80055b9487875a3ad`; the experiments transfer that function to frozen entity descriptors and do not reproduce its trained person-reidentification encoder. The 1,024-query cohort workload fixes a 2,472-entity union of initial top-five candidates across every partition. This is a second-stage pool after a full-KB scan, not a full-KB dense graph. Float32, float64, arrival-order and seeded-partition outputs are retained separately. Cache replay is a controlled local trace over real queries, not a production-service measurement.
 
-The source archive contains no checkpoints, data caches, generated results or historical logs. A separate numerical evidence asset is available from the [revision 11 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev11-evidence). The [revision 10 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev10-evidence) remains available unchanged. It contains compact predictions, timings, graph weights and paired correction records, without images or model weights. Extract it to an `evidence` directory and run:
+The source archive contains no checkpoints, data caches, generated results or historical logs. A separate numerical evidence asset is available from the [revision 12 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev12-evidence). The [revision 10 release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev10-evidence) remains available unchanged. It contains compact predictions, timings, graph weights and paired correction records, without images or model weights. Extract it to an `evidence` directory and run:
 
 ```bash
 python work/verify_contract_results.py evidence/rev7
