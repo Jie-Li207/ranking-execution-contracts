@@ -1,6 +1,8 @@
 # Ranking and Execution Contracts in Graph-Enhanced Multimodal Retrieval
 
-Core implementation for the experimental study of rooted candidate selection, graph-based reranking, and cohort-dependent diffusion. This repository contains executable source and dependency specifications. Data, model checkpoints, descriptors, generated results, and caches are obtained or generated locally.
+Core implementation for rooted candidate selection, graph reranking, cohort dependence, and native vector-search reuse across updates. This repository contains executable source and dependency specifications. Data, model checkpoints, descriptors, generated results, and caches are obtained or generated locally.
+
+Numerical outputs and frozen protocols for the append-only update study are available separately in the [revision13 evidence release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev13-evidence). The [revision12 evidence release](https://github.com/Jie-Li207/ranking-execution-contracts/releases/tag/rev12-evidence) retains all earlier rooted, reranking, cohort and cross-budget results. Both releases are needed to inspect the complete paper evidence.
 
 ## Installation
 
@@ -16,6 +18,63 @@ python work/audit_enumeration.py
 Activate `.venv` before the installation command (`.venv\Scripts\activate` on Windows; `source .venv/bin/activate` on Linux). `prepare.py` downloads pinned upstream source files, verifies SHA256 hashes, and writes the experiment configurations. `--config-only` writes configurations without downloads. The first enumeration run checks 200 small graphs against exhaustive entity-subset search; it does not require a dataset. Running it again after graph construction evaluates all available graph conditions.
 
 All generated files stay below the repository root unless `ICDE_STUDY_ROOT` is explicitly set for the scripts supporting that variable. Use a drive with sufficient free space. Full image encoding and training require substantially more disk space and time than the core algorithms. The scripts do not stop other processes. The low-label trainer requires CUDA and waits when it detects a competing Python GPU workload.
+
+## Append-only native-answer certificates
+
+The update study uses original public SIFT1M and Yandex Text-to-Image descriptors. It distinguishes unchanged exact neighbors, unchanged fresh native ANN answers, and a conservative adjacency-read certificate. The observer records the node adjacency lists read by pinned hnswlib0.8.0 and tracks edits to ordered adjacency. It does not change search decisions. Existing vectors, query bytes, metric and settings must remain unchanged; deletion, filters, existing-label edits and untracked writers are excluded. An unfamiliar operator is not automatically certified.
+
+Run from the repository root after installation. A C++17 toolchain is required (MSVC Build Tools on Windows or a compatible GCC/Clang on Linux). The measured reference uses Python3.12.7, NumPy2.4.6, hnswlib0.8.0, pybind11 3.0.1 and SQLite3.45.3. The observer build must pass native output equivalence before reuse is trusted on a different compiler or platform.
+
+```bash
+python work/prepare_updates.py
+python work/prepare_native.py
+python work/acquire_native_inputs.py
+python work/audit_native_ann.py --backend hnswlib --scale 100000 --phase development
+python work/acquire_t2i_ranges.py
+python work/prepare_observer.py
+cd work/native_observer
+python setup.py build_ext --inplace
+cd ../..
+```
+
+Public downloads verify frozen SHA256 hashes. The two 100k-input files total about161MB; the optional1M gallery prefix is about801MB. No raw data, weights, compiled extension, or index is committed. Sources downloaded at runtime retain their upstream license; hnswlib is Apache2.0. Keep all work on a drive with several GB free. By default the update study and the prior native study share the repository root. `ICDE_UPDATE_ROOT` and `ICDE_NATIVE_ROOT` may select existing workspaces; the compiled observer must be under the selected update root's `work/native_observer` directory.
+
+```bash
+python work/audit_updates.py --dataset t2i --seed 20261030
+python work/audit_updates.py --dataset t2i --seed 20261031
+python work/audit_updates.py --dataset t2i --seed 20261032
+python work/audit_updates.py --dataset sift --seed 20261030
+python work/audit_updates.py --dataset sift --seed 20261031
+python work/audit_updates.py --dataset sift --seed 20261032
+python work/benchmark_updates.py --dataset t2i --phase confirmation --protocol results/service_confirmation_protocol.json
+python work/benchmark_updates.py --dataset sift --phase confirmation --protocol results/service_confirmation_protocol.json
+python work/verify_service_updates.py --dataset t2i --phase confirmation
+python work/verify_service_updates.py --dataset sift --phase confirmation
+```
+
+The SIFT seed20261030 audit reuses the original100k native index built above. The text-to-image seed20261030 index is created by the update runner if absent. Existing completed audit folders are rejected; service runs resume only completed individual records. A partial SQLite file is rejected to preserve failed executions. A new output workspace is required for a fresh repeat.
+
+```bash
+python work/acquire_t2i_ranges.py --million
+python work/audit_updates.py --dataset t2i --scale 1000000
+python work/benchmark_updates.py --dataset t2i --scale 1000000 --phase confirmation --protocol results/service_scale_protocol.json
+python work/verify_service_updates.py --dataset t2i --scale 1000000 --phase confirmation
+python work/exact_update_reference.py --dataset sift
+python work/exact_update_reference.py --dataset t2i
+python work/exact_update_reference.py --dataset t2i --scale 1000000
+python work/measure_observer_cost.py --dataset sift
+python work/measure_observer_cost.py --dataset t2i
+python work/measure_observer_cost.py --dataset t2i --scale 1000000
+python work/summarize_new_results.py
+```
+
+The1M study repeats the same query IDs for a scale comparison; it is not additional independent-query evidence. Data are real benchmark descriptors, while repetition schedules and revision attributes are constructed. Native insert/search execution is serialized by a writer-priority read/write lock; reader and writer requests may be submitted concurrently. A batched SQLite join, identical CPU limits and auxiliary-payload budgets apply to every policy. Payload includes the complete version array and certificate arrays but excludes Python allocator overhead; it is not RSS. No-repeat and constrained-memory regressions are retained. Query identifiers select immutable vectors; encoding and parsing are outside the timed interval. Version counters are assumed not to wrap. Do not reuse certificates across index objects or a reset namespace.
+
+The verification command executes fresh unmodified hnswlib searches for each index snapshot and independently reconstructs record revisions. It compares ordered IDs, distances and joined values for every recorded request. This is distinct from simply reaggregating saved arrays. Numerical evidence is provided separately from this core source repository. Earlier revision12 evidence remains linked below for the rooted, cohort and cross-budget experiments.
+
+Run the complete matched-wrapper fairness control with the same service commands, adding `--wrapper matched` to both benchmark and verification invocations; summarize it with `python work/summarize_new_results.py --wrapper matched`. All policies then share one C++ binding and compiler, while the simple baselines disable dependency recording and version storage. The original-wrapper experiments are retained separately. This amendment was prompted by randomized development-query API timings after the first service runs; it is not another untouched query split. Every original service configuration is repeated without changing its workload.
+
+Twenty additional primary-anchor schedules were fixed to address the precision of five timing pairs on a shared machine. Run `python work/benchmark_updates.py --dataset t2i --scale 100000 --wrapper matched --phase timing_followup --protocol results/timing_followup_100000.json`, then the corresponding verification command with the same dataset, scale, wrapper and phase. Repeat at scale1000000 using `results/timing_followup_1000000.json`. Summarize with `python work/summarize_new_results.py --wrapper matched --phase timing_followup`. These schedules reuse the frozen query pool, with no parameter fitting; keep their intervals separate from the first five schedules. To check a downloaded evidence archive without raw descriptors, run `python work/verify_update_evidence.py PATH_TO_EXTRACTED_EVIDENCE`; this validates stored arrays and is distinct from fresh execution.
 
 ## Native ANN contracts and bounded update workloads
 

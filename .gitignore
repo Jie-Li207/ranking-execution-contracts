@@ -6,3 +6,13 @@
 !/work/
 /work/*
 !/work/*.py
+
+!/work/native_observer/
+/work/native_observer/*
+!/work/native_observer/observer.cpp
+!/work/native_observer/setup.py
+work/native_observer/build/
+work/native_observer/hnswlib/
+work/native_observer/*.pyd
+work/native_observer/*.so
+work/build_deps/
